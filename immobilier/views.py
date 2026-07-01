@@ -182,7 +182,7 @@ def home_view(request):
         produits = Produit.objects.filter(category=category) 
     else:
         produits = Produit.objects.all() 
-    return render(request, 'home.html', {'produits': produits, 'marques': marques})
+    return render(request, 'home.HTML', {'produits': produits, 'marques': marques})
 
 def register_view(request):
     if request.method == 'POST':
