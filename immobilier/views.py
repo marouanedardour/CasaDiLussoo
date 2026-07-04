@@ -256,7 +256,7 @@ def cart_view(request):
     print("IMAGES =", list(cart_items.values_list("id", flat=True)))
     return render(
         request,
-        "cart.html",
+        "cart.HTML",
         {
             "cart_items": cart_items
         }
