@@ -1,3 +1,23 @@
+from django.utils import timezone
+from reportlab.platypus import Table, TableStyle
+from reportlab.pdfbase.pdfmetrics import stringWidth
+from reportlab.platypus import Image
+from reportlab.lib.enums import TA_CENTER
+from reportlab.lib.colors import HexColor
+from reportlab.lib.styles import ParagraphStyle
+from reportlab.lib.utils import ImageReader
+import os
+from django.contrib import admin
+from annotated_types import doc
+from httpcore import request
+from reportlab.lib import styles
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.units import cm
+from django.core.files.base import ContentFile
+from io import BytesIO
+from django.core.mail import EmailMessage
+import io
 from difflib import get_close_matches
 from google.auth import default
 from django.core.paginator import Paginator
@@ -7,7 +27,7 @@ from django.core.files.uploadedfile import UploadedFile
 from django.shortcuts import get_object_or_404, redirect, render
 from django.core.files.base import ContentFile
 from immobilier.forms import RegisterForm
-from .models import Marque, MessageClient, Produit, ImageProduit 
+from .models import Marque, MessageClient, Order, Produit, ImageProduit 
 from django.contrib import messages
 from django.db.models import Q
 from django.conf import settings
@@ -19,6 +39,8 @@ from django.contrib.auth.forms import UserCreationForm
 from django import forms
 from groq import Groq
 from random import sample
+from .models import Cart, CartItem, Produit
+
 
 def upload_zip(request, produit_id):
     produit = get_object_or_404(Produit, pk=produit_id)
@@ -174,7 +196,6 @@ def login_view(request):
         form = AuthenticationForm()
     return render(request, 'login.html', {'form': form})
 
-@login_required(login_url='login') 
 def home_view(request):
     category = request.GET.get('cat')
     marques = Marque.objects.all() 
@@ -223,3 +244,239 @@ def logout_view(request):
 
 def about_view(request):
     return render(request, 'about.html')
+
+def cart_view(request):
+    cart_ids = request.session.get("cart", [])
+    cart_items = ImageProduit.objects.filter(
+        id__in=cart_ids
+    ).select_related(
+        "produit__marque"
+    )
+    print("SESSION =", cart_ids)
+    print("IMAGES =", list(cart_items.values_list("id", flat=True)))
+    return render(
+        request,
+        "cart.html",
+        {
+            "cart_items": cart_items
+        }
+    )
+    
+def send_order(request):
+    if request.method == "POST":
+        full_name = request.POST.get("nom")
+        email = request.POST.get("email")
+        phone = request.POST.get("tel")
+        message = request.POST.get("message", "")
+        cart_ids = request.session.get("cart", [])
+        images = ImageProduit.objects.filter(
+            id__in=cart_ids
+        ).select_related(
+            "produit__marque"
+        )
+        order_details = ""
+        for image in images:
+            product = image.produit
+            order_details += (
+                f"Brand: {product.marque.nom}\n"
+                f"Product: {product.nom}\n"
+                "-----------------------------\n"
+            )
+        order = Order.objects.create(
+            user=request.user if request.user.is_authenticated else None,
+            full_name=full_name,
+            email=email,
+            phone_number=phone,
+            message=message,
+            order_details=order_details,
+        )
+        order.refresh_from_db()
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(
+            buffer,
+            rightMargin=1.5 * cm,
+            leftMargin=1.5 * cm,
+            topMargin=1.5 * cm,
+            bottomMargin=1.5 * cm,
+        )
+        story = []
+        styles = getSampleStyleSheet()
+        title = ParagraphStyle(
+            "TitleLuxury",
+            parent=styles["Heading1"],
+            alignment=TA_CENTER,
+            textColor=HexColor("#b08d57"),
+            fontSize=24,
+            spaceAfter=20,
+        )
+        subtitle = ParagraphStyle(
+            "Sub",
+            parent=styles["Heading2"],
+            textColor=HexColor("#444444"),
+        )
+        normal = styles["Normal"]
+        logo_path = os.path.join(
+            settings.BASE_DIR,
+            "static",
+            "images",
+            "logo.png"
+        )
+        if os.path.exists(logo_path):
+            logo = Image(logo_path)
+            logo.drawHeight = 3 * cm
+            logo.drawWidth = 3 * cm
+            logo.hAlign = "CENTER"
+            story.append(logo)
+        story.append(
+            Paragraph(
+                "<b>Casa Di Lusso</b>",
+                title
+            )
+        )
+        story.append(
+            Paragraph(
+                "Quotation Request",
+                subtitle
+            )
+        )
+        story.append(Spacer(1, 0.5 * cm))
+        date = order.created_at or timezone.now()
+        story.append(
+            Paragraph(
+                f"<b>Date:</b> {date.strftime('%d/%m/%Y %H:%M')}",
+                normal
+            )
+        )
+        story.append(Spacer(1, 0.5 * cm))
+        story.append(
+            Paragraph("<b>Client Information</b>", subtitle)
+        )
+        story.append(
+            Paragraph(f"Name : {order.full_name}", normal)
+        )
+        story.append(
+            Paragraph(f"Email : {order.email}", normal)
+        )
+        story.append(
+            Paragraph(f"Phone : {order.phone_number}", normal)
+        )
+        story.append(Spacer(1, 0.5 * cm))
+        story.append(
+            Paragraph("<b>Client Message</b>", subtitle)
+        )
+        story.append(
+            Paragraph(
+                order.message or "No message",
+                normal
+            )
+        )
+        story.append(Spacer(1, 1 * cm))
+        story.append(
+            Paragraph(
+                "<b>Selected Products</b>",
+                subtitle
+            )
+        )
+        story.append(Spacer(1, 0.5 * cm))
+        brand_style = ParagraphStyle(
+            "Brand",
+            parent=normal,
+            alignment=TA_CENTER,
+            textColor=HexColor("#b08d57"),
+            fontSize=11,
+        )
+        table_data = []
+        row = []
+        for image in images:
+            product = image.produit
+            elements = []
+            if os.path.exists(image.image.path):
+                img = Image(image.image.path)
+                img.drawWidth = 5 * cm
+                img.drawHeight = 5 * cm
+                elements.append(img)
+            elements.append(
+                Paragraph(
+                    f"<b>{product.marque.nom}</b>",
+                    brand_style
+                )
+            )
+            row.append(elements)
+            if len(row) == 3:
+                table_data.append(row)
+                row = []
+        if row:
+            while len(row) < 3:
+                row.append("")
+            table_data.append(row)
+        table = Table(
+            table_data,
+            colWidths=[6 * cm, 6 * cm, 6 * cm]
+        )
+        table.setStyle(TableStyle([
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 15),
+        ]))
+        story.append(table)
+        doc.build(story)
+        pdf = buffer.getvalue()
+        buffer.close()
+        order.pdf.save(
+            f"{order.reference}.pdf",
+            ContentFile(pdf),
+            save=False
+        )
+        order.save()
+        request.session["cart"] = []
+        request.session.modified = True
+        messages.success(request, "Your request has been sent successfully.")
+        return redirect("home")
+    
+def add_to_cart(request, produit_id):
+    cart = request.session.get("cart", [])
+    if produit_id not in cart:
+        cart.append(produit_id)
+    request.session["cart"] = cart
+    request.session.modified = True
+    print("CART =", request.session["cart"])   
+    return JsonResponse({
+        "status": "success",
+        "count": len(cart)
+    })
+
+def remove_from_cart(request, image_id):
+    cart = request.session.get("cart", [])
+    if image_id in cart:
+        cart.remove(image_id)
+    request.session["cart"] = cart
+    request.session.modified = True
+    return redirect("cart_view")
+
+@login_required
+def my_orders(request):
+    orders = Order.objects.filter(
+        user=request.user
+    ).order_by("-created_at")
+    return render(
+        request,
+        "my_orders.html",
+        {
+            "orders": orders
+        }
+    )    
+
+@login_required
+def order_detail(request, order_id):
+    order = get_object_or_404(
+        Order,
+        id=order_id,
+        user=request.user
+    )
+    return render(
+        request,
+        "order_detail.html",
+        {
+            "order": order
+        }
+    ) 

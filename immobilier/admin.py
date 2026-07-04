@@ -37,3 +37,40 @@ from .models import UserProfile
 class UserProfileAdmin(admin.ModelAdmin):
     list_display = ('user', 'user_type')
     list_filter = ('user_type',) 
+
+from django.contrib import admin
+from .models import Order
+from django.utils.html import format_html
+
+@admin.register(Order)
+class OrderAdmin(admin.ModelAdmin):
+    list_display = (
+        "reference",
+        "full_name",
+        "phone_number",
+        "created_at",
+    )
+    readonly_fields = (
+        "reference",
+        "created_at",
+        "download_pdf",
+    )
+    fields = (
+        "reference",
+        ("full_name", "phone_number"),
+        "email",
+        "message",
+        "order_details",
+        "pdf",
+        "created_at",
+        "download_pdf",
+    )
+    def download_pdf(self, obj):
+        if obj.pdf:
+            return format_html(
+                '<a class="button" href="{}" target="_blank">📄 Download Order PDF</a>',
+                obj.pdf.url
+            )
+        return "No PDF"
+    download_pdf.short_description = "Order File"
+    

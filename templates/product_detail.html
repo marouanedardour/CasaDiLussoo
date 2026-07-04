@@ -31,14 +31,48 @@
             {% for image in page_obj %}
                 <div class="gallery-item" style="position: relative;">
                     <img src="{{ image.image.url }}" alt="Image" class="gallery-img">
-                        <button class="chat-overlay-btn"
-                        onclick="event.stopPropagation(); openChatAndAsk(
-                        '{{ produit.nom|escapejs }}',
-                        '{{ image.image.url }}'
-                        )">
-                        💬
-                        </button>
-                        <button class="ask-bot-btn" onclick="openChatWindow(); askAboutProduct('{{ produit.nom }}')">
+                        <div style="
+                        position:absolute;
+                        bottom:10px;
+                        right:10px;
+                        display:flex;
+                        gap:8px;
+                        z-index:20;
+                        ">
+                            <button
+                                onclick="openChatAndAsk('{{ image.image.url }}')"
+                                style="
+                                width:34px;
+                                height:34px;
+                                border:none;
+                                border-radius:50%;
+                                background:#b89045;
+                                box-shadow:0 4px 12px rgba(255,240,240,.25);
+                                color:#473c29;
+                                cursor:pointer;
+                                ">
+                                💬
+                            </button>
+                            <button
+                                onclick="addToCart('{{ image.id }}')"
+                                style="
+                                width:34px;
+                                height:34px;
+                                border:none;
+                                border-radius:50%;
+                                background:#b89045;
+                                backdrop-filter:blur(8px);
+                                box-shadow:0 4px 12px rgba(255, 240, 240, 0.25);
+                                color:#473c29;
+                                font-size:15px;
+                                cursor:pointer;
+                                transition:.25s;
+                                ">
+                                🛒
+                            </button>                                                
+                        </div>
+                        
+                        <button class="ask-bot-btn" onclick="openChatAndAsk('{{ image.image.url }}')">
                             Conseillez-moi sur ce produit
                         </button>
                 </div>
@@ -116,22 +150,16 @@
         }
     }
 
-    function openChatAndAsk(productName,imageUrl){
-        openChatWindow();
-        const chatBox = document.getElementById('chat-messages');
-        chatBox.innerHTML += `
-        <p class="user-msg">
-            <img src="${imageUrl}"
-            style="
-            width:120px;
-            border-radius:10px;
-            cursor:pointer;
-            ">
-        </p>
-        `;
-        chatBox.scrollTop = chatBox.scrollHeight;
+
+function addToCart(productId){
+    fetch(`/add-to-cart/${productId}/`)
+    .then(response=>response.json())
+    .then(data=>{
+        if(data.status==="success"){
+            alert("Product added to cart.");
+        }
+    });
 
 }
-
 </script>
 {% endblock %}

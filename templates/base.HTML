@@ -6,8 +6,9 @@
     <title>CASA DI LUSSO | Élégance et Design</title>
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Montserrat:wght@300;400&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/lightbox2/2.11.3/css/lightbox.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="{% static 'css_new/main.css' %}?v={% now 'U' %}">    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css"/>
-    <link rel="shortcut icon" href="{% static 'images/logo.gif' %}">
+    <link rel="stylesheet" href="{% static 'css_new/main.css' %}?v={% now 'U' %}">    
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css"/>
+    <link rel="shortcut icon" href="{% static 'images/logo.png' %}">
     <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
 </head>
 <body>
@@ -27,21 +28,9 @@
         <a href="{% url 'about' %}" class="nav-link">ABOUT US</a>
         <a href="{% url 'contact' %}" class="nav-link">CONTACT</a>
         <div class="user-actions">
-            {% if user.is_authenticated %}
-                <span class="welcome-text">
-                    Hello, {{ user.username }}
-                </span>
-                <a href="{% url 'logout' %}" class="nav-link exit">
-                    EXIT
-                </a>
-            {% else %}
-                <a href="{% url 'login' %}" class="nav-link">
-                    LOGIN
-                </a>
-                <a href="{% url 'register' %}" class="nav-link">
-                    SIGN UP
-                </a>
-            {% endif %}
+            <a href="{% url 'cart_view' %}" class="nav-link">
+                <img src="{% static 'images/shop.png' %}" alt="Cart" style="width: 30px; height: 30px;">
+            </a>
         </div>
     </nav>
     <div id="side-menu" class="side-menu">
@@ -85,10 +74,102 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lightbox2/2.11.3/js/lightbox.min.js"></script>
 
 <script>
+    const STORAGE_KEY = "casadilusso_chat";
     const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]').value;
-    function openChatWindow(){
-        const win = document.getElementById('chatWindow');
-        win.style.display = 'flex';
+    function saveChat(){
+        localStorage.setItem(
+            STORAGE_KEY,
+            JSON.stringify({
+                history: chatHistory,
+                images: chatImages,
+                time: Date.now()
+            })
+        );
+    }
+    function loadChat(){
+        const data = localStorage.getItem(STORAGE_KEY);
+        if(!data) return;
+        const saved = JSON.parse(data);
+        if(Date.now()-saved.time>3600000){
+            localStorage.removeItem(STORAGE_KEY);
+            return;
+        }
+        chatHistory = saved.history || [];
+        chatImages = saved.images || [];
+        const box=document.getElementById("chat-messages");
+        box.innerHTML="";
+        let imageIndex=0;
+        chatHistory.forEach(msg=>{
+            if(msg.role==="user"){
+                if(msg.content==="__IMAGE__"){
+                    box.innerHTML+=`
+                    <div class="user-msg">
+                        <img
+                        src="${chatImages[imageIndex++]}"
+                        style="
+                        width:120px;
+                        border-radius:10px;
+                        ">
+                    </div>
+                    `;
+                }
+                else{
+                    box.innerHTML+=`
+                    <p class="user-msg">
+                    ${msg.content}
+                    </p>
+                    `;
+                }
+            }
+            else{
+                const html=msg.content.replace(
+                    /IMAGE:(https?:\/\/[^\s|]+)\|LINK:(https?:\/\/[^\s]+)/g,
+                    function(match,image,link){
+                        return `
+                        <img
+                        src="${image}"
+                        style="
+                        width:150px;
+                        border-radius:10px;
+                        cursor:pointer;
+                        "
+                        onclick="window.location.href='${link}'">
+                        `;
+                    }
+                );
+                box.innerHTML+=`
+                <p class="bot-msg">
+                Casa: ${html}
+                </p>
+                `;
+            }
+        });
+        box.scrollTop=box.scrollHeight;
+    }
+    function openChatAndAsk(imageUrl){
+        const chatWindow = document.getElementById("chatWindow");
+        chatWindow.style.display = "flex";
+        chatWindow.style.visibility = "visible";
+        chatWindow.style.opacity = "1";
+        const chatBox = document.getElementById("chat-messages");
+        chatImages.push(imageUrl);
+        chatHistory.push({
+            role: "user",
+            content: "__IMAGE__"
+        });
+        chatBox.innerHTML += `
+            <div class="user-msg">
+                <img
+                    src="${imageUrl}"
+                    style="
+                        width:120px;
+                        border-radius:10px;
+                        display:block;
+                    ">
+            </div>
+        `;
+        saveChat();
+        chatBox.scrollTop = chatBox.scrollHeight;
     }
     function toggleChat(event){
         if(event){
@@ -102,6 +183,7 @@
             win.style.display='flex';
         }
     }
+    /*
     document.addEventListener('click', function(e){
         const win = document.getElementById('chatWindow');
         const bubble = document.querySelector('.chat-bubble');
@@ -115,6 +197,7 @@
             win.style.display='none';
         }
     });
+    */
     function handleKeyPress(e){
         if(e.key==="Enter"){
             sendMessage();
@@ -122,21 +205,27 @@
     }
 
     let chatHistory = [];
+    let chatImages = [];
     async function sendMessage() {
         const input = document.getElementById('chat-input');
         const box = document.getElementById('chat-messages');
         const msg = input.value.trim();
         if (!msg) return;
-        chatHistory.push({"role": "user", "content": msg});
+        chatHistory.push({"role":"user","content":msg});
         box.innerHTML += `<p class="user-msg">Vous: ${msg}</p>`;
-        input.value = "";
-        box.scrollTop = box.scrollHeight;
+        saveChat();     
+        input.value="";
+        box.scrollTop=box.scrollHeight;
         try {
             let lang = navigator.language.split('-')[0];
             let response = await fetch('/chatbot/', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrftoken},
-                body: JSON.stringify({'messages': chatHistory, 'lang': lang})
+                body: JSON.stringify({
+                messages: chatHistory,
+                images: chatImages,
+                lang: lang
+                })
             });
             let data = await response.json();
             let reply = data.reply;
@@ -158,14 +247,18 @@
 
             });
             box.innerHTML += `<p class="bot-msg">Casa: ${formattedReply}</p>`;
+            saveChat();
             box.scrollTop = box.scrollHeight;
         } catch (error) {
             box.innerHTML += `<p class="bot-msg" style="color:red;">Erreur de connexion.</p>`;
         }
     }
     function goProduct(url){
-    window.location.assign(url);
-    }
+        window.location.assign(url);
+        }
+        window.addEventListener("load",function(){
+        loadChat();
+    });
     
 </script>
 
@@ -182,7 +275,12 @@
         lastScrollTop = currentScroll <= 0 ? 0 : currentScroll;
     }, false);
     
+    
 </script>
+
+<div id="toast-message" style="display:none; position: fixed; bottom: 80px; right: 20px; background: #28a745; color: white; padding: 15px 25px; border-radius: 5px; z-index: 9999; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+    Product added to cart!
+</div>
 
 <script>
 function toggleSideMenu() {
@@ -198,6 +296,19 @@ document.addEventListener('click', function(event) {
             sideMenu.style.width = "0";
         }
     });
+
+function addToCart(productId) {
+    fetch(`/add-to-cart/${productId}/`)
+    .then(response => response.json())
+    .then(data => {
+        if(data.status === 'success') {
+            const toast = document.getElementById('toast-message');
+            toast.style.display = 'block';
+            setTimeout(() => { toast.style.display = 'none'; }, 2500);
+        }
+    })
+    .catch(error => console.error('Error:', error));
+}
 </script>
 
 </body>

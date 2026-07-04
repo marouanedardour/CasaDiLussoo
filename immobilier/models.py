@@ -1,5 +1,5 @@
-from sre_parse import CATEGORIES
 from django.db import models
+import uuid
 
 class Client(models.Model): 
     email = models.EmailField(unique=True)
@@ -14,7 +14,6 @@ choix_list = [
 
 class BienImmobilier(models.Model): 
     marque = models.ForeignKey('Marque', on_delete=models.CASCADE, related_name='biens', null=True, blank=True)
-    id = models.AutoField(primary_key=True)
     statut = models.CharField(max_length=50, choices=choix_list, default='disponible')
     
     def is_available(self):
@@ -48,6 +47,7 @@ CATEGORY_CHOICES = [
     ('materials', 'Materials'),
     ('wellness', 'Wellness'),
 ]
+
 class Produit(models.Model):
     marque = models.ForeignKey('Marque', on_delete=models.CASCADE, related_name='produits')
     nom = models.CharField(max_length=200)
@@ -76,7 +76,7 @@ class ImageProduit(models.Model):
         return f"Image pour {self.produit.nom}"
     
 class MessageClient(models.Model):
-    produit = models.ForeignKey(Produit, on_delete=models.CASCADE, related_name='messages', null=True, blank=True)
+    produit = models.ForeignKey(Produit, on_delete=models.SET_NULL, null=True, blank=True, related_name='messages')
     nom = models.CharField(max_length=100)
     email = models.EmailField()
     tel = models.CharField(max_length=20)
@@ -91,13 +91,64 @@ from django.db import models
 
 class UserProfile(models.Model):
     USER_TYPES = (
-        ('manager', 'مدير'),
-        ('employee', 'موظف'),
-        ('client', 'مشتري'),
+        ('manager', 'Manager'),
+        ('employee', 'Employee'),
+        ('client', 'Client'),
     )
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     user_type = models.CharField(max_length=20, choices=USER_TYPES)
 
     def __str__(self):
-        return f"{self.user.username} - {self.user_type}"    
+        return f"{self.user.username} - {self.user_type}"   
     
+class Cart(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    session_key = models.CharField(max_length=255, null=True, blank=True)
+
+    def __str__(self):
+        if self.user:
+            return f"Cart of {self.user.username}"
+        return f"Guest Cart ({self.session_key})"
+
+class CartItem(models.Model):
+    cart = models.ForeignKey(Cart, on_delete=models.CASCADE, related_name='items')
+    produit = models.ForeignKey(Produit, on_delete=models.CASCADE)
+    quantity = models.PositiveIntegerField(default=1)
+    
+    def __str__(self):
+        return self.produit.nom
+    
+from django.utils import timezone
+import uuid
+
+class Order(models.Model):
+    user = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+    STATUS = (
+        ("new", "New"),
+        ("processing", "Processing"),
+        ("completed", "Completed"),
+    )
+    reference = models.CharField(
+        max_length=30,
+        unique=True,
+        blank=True,
+    )
+    full_name = models.CharField(max_length=100)
+    email = models.EmailField()
+    phone_number = models.CharField(max_length=20)
+    message = models.TextField(blank=True)
+    order_details = models.TextField()
+    pdf = models.FileField(upload_to="orders/", blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    def save(self, *args, **kwargs):
+        if not self.reference:
+            today = timezone.now().strftime("%Y%m%d")
+            self.reference = f"CDL-{today}-{uuid.uuid4().hex[:6].upper()}"
+        super().save(*args, **kwargs)
+    def __str__(self):
+        return self.reference

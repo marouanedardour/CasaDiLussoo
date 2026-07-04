@@ -1,0 +1,59 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<div style="max-width:1000px;margin:50px auto;padding:20px;">
+    <h2 style="margin-bottom:30px;">
+        Previous Requests
+    </h2>
+    {% if orders %}
+    <table style="width:100%;border-collapse:collapse;">
+        <tr style="background:#c5a059;color:white;">
+            <th style="padding:15px;">Reference</th>
+            <th>Date</th>
+            <th>PDF</th>
+            <th>Details</th>
+        </tr>
+        {% for order in orders %}
+        <tr style="border-bottom:1px solid #ddd;">
+            <td style="padding:15px;">
+                {{ order.reference }}
+            </td>
+            <td>
+                {{ order.created_at|date:"d/m/Y H:i" }}
+            </td>
+            <td>
+                {% if order.pdf %}
+                <a
+                    href="{{ order.pdf.url }}"
+                    target="_blank"
+                    style="
+                    color:#c5a059;
+                    text-decoration:none;
+                    font-weight:bold;
+                    ">
+                    📄 Download
+                </a>
+                {% endif %}
+            </td>
+            <td>
+                <a
+                    href="{% url 'order_detail' order.id %}"
+                    style="
+                    background:#c5a059;
+                    color:white;
+                    padding:8px 15px;
+                    border-radius:6px;
+                    text-decoration:none;
+                    ">
+                    View
+                </a>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% else %}
+    <p>You don't have any previous requests.</p>
+    {% endif %}
+</div>
+{% endblock %}

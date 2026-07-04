@@ -1,0 +1,59 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<div style="max-width:900px;margin:50px auto;padding:25px;">
+    <h2 style="margin-bottom:30px;">
+        Order Details
+    </h2>
+    <div style="background:#f7f7f7;padding:25px;border-radius:10px;">
+        <p><strong>Reference:</strong> {{ order.reference }}</p>
+        <p><strong>Date:</strong>
+            {{ order.created_at|date:"d/m/Y H:i" }}
+        </p>
+        <p><strong>Name:</strong>
+            {{ order.full_name }}
+        </p>
+        <p><strong>Email:</strong>
+            {{ order.email }}
+        </p>
+        <p><strong>Phone:</strong>
+            {{ order.phone_number }}
+        </p>
+        <p><strong>Message:</strong></p>
+        <div style="
+            background:white;
+            padding:15px;
+            border-radius:8px;
+            margin-bottom:20px;
+            ">
+            {{ order.message|default:"No message" }}
+        </div>
+        <p><strong>Selected Products</strong></p>
+        <div style="
+            background:white;
+            padding:15px;
+            border-radius:8px;
+            white-space:pre-line;
+            ">
+            {{ order.order_details }}
+        </div>
+        {% if order.pdf %}
+        <div style="margin-top:30px;">
+            <a
+                href="{{ order.pdf.url }}"
+                target="_blank"
+                style="
+                background:#c5a059;
+                color:white;
+                padding:12px 25px;
+                border-radius:8px;
+                text-decoration:none;
+                ">
+                📄 Download PDF
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
